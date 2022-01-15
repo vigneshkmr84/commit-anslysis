@@ -23,8 +23,8 @@ RUN mkdir -p /root/.ssh/ \
     && touch /root/.ssh/id_rsa \
     && touch /root/.ssh/known_hosts \
     && chmod 600 /root/.ssh/known_hosts \
-    && chmod 600 /root/.ssh/id_rsa \
-    && ssh-keyscan github.com >> /root/.ssh/known_hosts
+    && chmod 600 /root/.ssh/id_rsa 
+#    && ssh-keyscan github.com >> /root/.ssh/known_hosts
 
 RUN ssh-keyscan github.com
 

@@ -201,12 +201,12 @@ def main():
     start_time = time.time()
     clone_git_repos(REPO_CONFIG_FILE, REPOS_FOLDER)
     end_time = time.time()
-    print("\nTime taken for Cloning %s secs" % (str(round(end_time - start_time, 2))))
+    print("\nTime taken for Cloning %s sec." % (str(round(end_time - start_time, 2))))
 
     iterate_repos(get_repository_folder_list(REPOS_FOLDER), META_DATA_OUTPUT_FOLDER)
     formatting_final_json()
     write_to_csv()
-    
+    print("Time taken to extract metadata : " + str(round(time.time()-end_time, 2)) + " sec.")
     print("Consolidated Json File : " + CONSOLIDATED_JSON_OUTPUT_FILE)
     print("\n")
     print("Completed extracting all metadata from the given list of repos")
