@@ -101,7 +101,7 @@ You can load the CSV File to load to MYSQL db as well or any other RDBMS accordi
 <details>
   <summary markdown="span">How Data is Stored in MongoDB</summary>
 
-``` json
+``` 
 {
     _id: ObjectId("61e1647a3caa0b6db689cd84"),
     commit_hash: '5a501aa2163e84268c1feead1f049855d7452232',
