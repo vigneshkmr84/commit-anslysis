@@ -5,6 +5,8 @@ import subprocess
 import time
 from pathlib import Path
 import json
+import pandas
+import configparser
 
 
 def folder_cleanup(repos_folder):
@@ -19,15 +21,15 @@ def folder_cleanup(repos_folder):
 
 
 def clone_git_repos(repo_config_file, repos_folder):
-    properties_file = open(repo_config_file, "r")
+    
     os.chdir(repos_folder)
-    print("\n")
-    for repo in properties_file:
-        repo = repo.replace("\n", "")
+    config = configparser.ConfigParser(allow_no_value=True)
+    config.read(repo_config_file)
+    repoList = config['repository']['list'].split()
+    for repo in repoList:
         print("Repo Remote-URL: " + repo)
         subprocess.check_output(["git", "clone", "--no-checkout", repo])
         print("\n")
-    properties_file.close()
     os.chdir(CURRENT_DIR)
 
 
@@ -51,13 +53,11 @@ def extract_git_metadata(repo, metadata_output_folder):
     raw_file_path = os.path.join(output_folder_abs_path, repo_name + "-gitlog.raw")
     print("Raw File : " + raw_file_path)
 
-    # git command : git log --all --shortstat --no-merges --reverse
-    # --pretty="format:%H|~|%h|~|%aN|~|%ae|~|%aD|~|%cN|~|%ce|~|%cD|~|%f"
+    # git command : git log --all --shortstat --no-merges --reverse --pretty="format:%H|~|%h|~|%aN|~|%ae|~|%aD|~|%cN|~|%ce|~|%cD|~|%f" –date=iso-strict
     commit_log = subprocess.check_output(["git", "-C", repo, "log", "--all", "--shortstat", "--no-merges", "--reverse",
-                                         "--pretty=format:%H|~|%h|~|%aN|~|%ae|~|%aD|~|%cN|~|%ce|~|%cD|~|%f"]).decode(
-        "utf-8")
-
-    # replacing escape characters (mainly in committer name, author name)
+                                         "--pretty=format:%H|~|%h|~|%aN|~|%ae|~|%ad|~|%cN|~|%ce|~|%cd|~|%f", "--date=format:%Y-%m-%d %H:%M:%S"]).decode("utf-8")                                         
+    # git log --date=short --all --shortstat --no-merges --reverse --pretty="format:%H|~|%h|~|%aN|~|%ae|~|%aI|~|%cN|~|%ce|~|%cI|~|%f" –date=iso-strict
+    # replacing escape characters (mainly in committer name, author name)   
     commit_log = commit_log.replace('"', "").replace("\\", "")
     with open(raw_file_path, "w+") as outfile:
         outfile.write(commit_log)
@@ -84,17 +84,18 @@ def get_repo_name(repo):
 
 def track_changes(commit_stats):
     lines = commit_stats.strip().split(',')
-    dictionary = {}
-
+    #dictionary = {}
+    dictionary = { "files_changed" : 0, "lines_inserted" : 0, "lines_deleted" : 0}
+    
     for single_line in lines:
 
         single_line = single_line.strip()
         if "changed" in single_line:
-            dictionary["files_changed"] = single_line.strip().split(' ')[0]
+            dictionary["files_changed"] = int(single_line.strip().split(' ')[0])
         if "insertion" in single_line:
-            dictionary["lines_inserted"] = single_line.strip().split(' ')[0]
+            dictionary["lines_inserted"] = int(single_line.strip().split(' ')[0])
         if "deletion" in single_line:
-            dictionary["lines_deleted"] = single_line.strip().split(' ')[0]
+            dictionary["lines_deleted"] = int(single_line.strip().split(' ')[0])
     json_object = json.dumps(dictionary)
     json_string = str(json_object).replace('}', '').replace('{', '')
 
@@ -122,7 +123,10 @@ def generate_json_data(raw_file, repo_name):
             subject_sanitized = line[8].rstrip("\n")
 
             data = "{ \"commit_hash\" : \"" + commit_hash + "\", \"short_hash\" : \"" + short_hash + "\", \"author_name\" : \"" + author_name + "\" , \"author_email\" : \"" + author_email + "\" , \"author_date\" : \"" + author_date + "\" , \"committer_name\" : \"" + committer_name + "\" , \"committer_email\" : \"" + committer_email + "\", \"committer_date\" : \"" + committer_date + "\", \"subject\" : \"" + subject_sanitized + "\" }"
-
+            
+            # ISODate format 
+            #data = "{ \"commit_hash\" : \"" + commit_hash + "\", \"short_hash\" : \"" + short_hash + "\", \"author_name\" : \"" + author_name + "\" , \"author_email\" : \"" + author_email + "\" , \"author_date\" : ISODate(\"" + author_date + "\") , \"committer_name\" : \"" + committer_name + "\" , \"committer_email\" : \"" + committer_email + "\", \"committer_date\" : \"" + committer_date + "\", \"subject\" : \"" + subject_sanitized + "\" }"
+            
             # for reading the next line (which is the --shortstat line )
             next_line = raw_file.readline()
             next_line = next_line.rstrip(next_line[-1]).strip()
@@ -163,6 +167,11 @@ def create_consolidated_json_file():
     with open(CONSOLIDATED_JSON_OUTPUT_FILE, "w+") as jsonFile:
         jsonFile.write("[")
 
+def write_to_csv():
+    print("Converting json to CSV file : " + CONSOLIDATED_CSV_OUTPUT_FILE)
+    jsonData = pandas.read_json(CONSOLIDATED_JSON_OUTPUT_FILE)
+    
+    jsonData.to_csv(CONSOLIDATED_CSV_OUTPUT_FILE, index=False, header=None)
 
 def iterate_repos(folder_list, metadata_folder):
     for singleRepo in folder_list:
@@ -178,10 +187,11 @@ def iterate_repos(folder_list, metadata_folder):
 # Will give the current working dir (for starting reference)
 CURRENT_DIR = os.path.abspath(os.getcwd())
 ROOT_FOLDER = os.path.join(CURRENT_DIR, "commit-data")
-REPO_CONFIG_FILE = os.path.join(os.getcwd(), "config", "repo.config")
+REPO_CONFIG_FILE = os.path.join(os.getcwd(), "config", "commit-analysis.config")
 REPOS_FOLDER = os.path.join(ROOT_FOLDER, "repos")
 META_DATA_OUTPUT_FOLDER = os.path.join(ROOT_FOLDER, "output")
 CONSOLIDATED_JSON_OUTPUT_FILE = os.path.join(META_DATA_OUTPUT_FOLDER, "consolidated-output.json")
+CONSOLIDATED_CSV_OUTPUT_FILE = os.path.join(META_DATA_OUTPUT_FOLDER, "consolidated-output.csv")
 
 
 def main():
@@ -191,11 +201,12 @@ def main():
     start_time = time.time()
     clone_git_repos(REPO_CONFIG_FILE, REPOS_FOLDER)
     end_time = time.time()
-    print("\nTime taken for Cloning %s secs" % (str(round(end_time - start_time, 2))))
+    print("\nTime taken for Cloning %s sec." % (str(round(end_time - start_time, 2))))
 
     iterate_repos(get_repository_folder_list(REPOS_FOLDER), META_DATA_OUTPUT_FOLDER)
     formatting_final_json()
-
+    write_to_csv()
+    print("Time taken to extract metadata : " + str(round(time.time()-end_time, 2)) + " sec.")
     print("Consolidated Json File : " + CONSOLIDATED_JSON_OUTPUT_FILE)
     print("\n")
     print("Completed extracting all metadata from the given list of repos")
